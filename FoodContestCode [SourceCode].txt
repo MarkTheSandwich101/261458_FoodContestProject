@@ -78,7 +78,7 @@ class SiameseDataGenerator(tf.keras.utils.Sequence):
                 img1_batch.append(self.load_and_preprocess(row['Image 1']))
                 img2_batch.append(self.load_and_preprocess(row['Image 2']))
                 
-        # 📌 [แก้จุดนี้!] บรรทัดที่ 71 และ 72: เปลี่ยนวงเล็บของ img1 และ img2 จาก [ ] เป็น ( ) 
+        # เปลี่ยนวงเล็บของ img1 และ img2 จาก [ ] เป็น ( ) 
         # เพื่อให้ Keras 3 มองว่าเป็น Tuple ไม่ใช่ List
         if self.is_training:
             return (np.array(img1_batch), np.array(img2_batch)), np.array(labels_batch)

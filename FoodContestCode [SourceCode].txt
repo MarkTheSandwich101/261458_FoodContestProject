@@ -1,3 +1,7 @@
+#ต้องมีโฟลเดอร์ Intragram Photos ในนั้นจะมีโฟลเดอร์ย่อยที่แบ่งภาพออกเป็น 5 เมนู ได้แก่ Burger , Dessert , Pizza , Ramen และ Sushi
+#ต้องมีโฟลเดอร์ Questionaire Images ในนั้นจะมีโฟลเดอร์ย่อยที่แบ่งภาพออกเป็น 5 เมนู ได้แก่ Burger , Dessert , Pizza , Ramen และ Sushi
+#ต้องมีโฟลเดอร์ Test Images ในนั้นจะมีภาพเมนูอาหารเพื่อใช้ในการทำการแข่งขันหาอาหารน่ากิน
+
 import os
 import numpy as np
 import pandas as pd

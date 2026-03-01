@@ -1,0 +1,140 @@
+import os
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, GlobalAveragePooling2D, Subtract
+from tensorflow.keras.applications import MobileNetV2
+
+print("\n")
+print("Starting TensorFlow version:", tf.__version__)
+
+# ล็อก Address ของ Workspace ตามที่คุณระบุ
+WORKSPACE_PATH = r"C:\Users\USER\Desktop\FoodContestProject"
+
+# ==========================================
+# สเตปที่ 1: โหลดข้อมูล CSV
+# ==========================================
+print("Loading Files CSV... \n")
+train_df = pd.read_csv(os.path.join(WORKSPACE_PATH, 'data_from_questionaire.csv'))
+train_df['target'] = train_df['Winner'].apply(lambda x: 0 if x == 1 else 1)
+
+IMG_SHAPE = (224, 224, 3)
+BATCH_SIZE = 16
+
+# ==========================================
+# สเตปที่ 2: ปรับปรุง Data Generator ให้มุดเข้าโฟลเดอร์ย่อยได้
+# ==========================================
+class SiameseDataGenerator(tf.keras.utils.Sequence):
+    def __init__(self, dataframe, image_dir, batch_size, img_shape, is_training=True):
+        super().__init__() # เพิ่มบรรทัดนี้เพื่อแก้ Warning สีเหลืองกวนใจ
+        self.dataframe = dataframe
+        self.image_dir = image_dir
+        self.batch_size = batch_size
+        self.img_shape = img_shape
+        self.is_training = is_training
+        self.indexes = np.arange(len(self.dataframe))
+        self.base_path = WORKSPACE_PATH
+        
+    def __len__(self):
+        return int(np.ceil(len(self.dataframe) / self.batch_size))
+    
+    def on_epoch_end(self):
+        if self.is_training:
+            np.random.shuffle(self.indexes)
+            
+    def load_and_preprocess(self, img_name, menu_folder=None):
+        # ถ้ามีระบุหมวดหมู่ (ตอน Train) ให้มุดเข้าโฟลเดอร์เมนูก่อน
+        if menu_folder:
+            img_path = os.path.join(self.base_path, self.image_dir, menu_folder, img_name)
+        # ถ้าไม่มีหมวดหมู่ (ตอน Test) ให้ดึงรูปจากโฟลเดอร์หลักเลย
+        else:
+            img_path = os.path.join(self.base_path, self.image_dir, img_name)
+            
+        img = load_img(img_path, target_size=self.img_shape[:2])
+        img_array = img_to_array(img)
+        return tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
+
+    def __getitem__(self, index):
+        batch_indexes = self.indexes[index * self.batch_size:(index + 1) * self.batch_size]
+        batch_df = self.dataframe.iloc[batch_indexes]
+        
+        img1_batch, img2_batch, labels_batch = [], [], []
+        
+        for _, row in batch_df.iterrows():
+            if self.is_training:
+                # ให้ AI ไปอ่านคอลัมน์ 'Menu' (เช่น Sushi) เพื่อเข้าให้ถูกโฟลเดอร์
+                menu = row['Menu']
+                img1_batch.append(self.load_and_preprocess(row['Image 1'], menu))
+                img2_batch.append(self.load_and_preprocess(row['Image 2'], menu))
+                labels_batch.append(row['target'])
+            else:
+                # ชุดทดสอบ Test ไม่มีคอลัมน์ Menu (รูปชื่อยาวๆ จะถูกดึงตรงๆ จาก Test Images)
+                img1_batch.append(self.load_and_preprocess(row['Image 1']))
+                img2_batch.append(self.load_and_preprocess(row['Image 2']))
+                
+        # 📌 [แก้จุดนี้!] บรรทัดที่ 71 และ 72: เปลี่ยนวงเล็บของ img1 และ img2 จาก [ ] เป็น ( ) 
+        # เพื่อให้ Keras 3 มองว่าเป็น Tuple ไม่ใช่ List
+        if self.is_training:
+            return (np.array(img1_batch), np.array(img2_batch)), np.array(labels_batch)
+        return ((np.array(img1_batch), np.array(img2_batch)), )
+
+# ***จุดสำคัญ: คุณเก็บโฟลเดอร์ 5 เมนูไว้ที่ไหน?***
+# ถ้าเก็บไว้ใน "Instagram Photos" ให้แก้คำว่า 'Questionaire Images' ในวงเล็บข้างล่างนี้ เป็น 'Instagram Photos' แทนนะครับ
+train_gen = SiameseDataGenerator(train_df, image_dir='Questionaire Images', batch_size=BATCH_SIZE, img_shape=IMG_SHAPE)
+
+# ==========================================
+# สเตปที่ 3: สร้างโมเดล Siamese Network
+# ==========================================
+print("Building Siamese Network Model ... \n")
+base_model = MobileNetV2(input_shape=IMG_SHAPE, include_top=False, weights='imagenet')
+base_model.trainable = False 
+
+inputs = Input(shape=IMG_SHAPE)
+x = base_model(inputs)
+x = GlobalAveragePooling2D()(x)
+feature_extractor = Model(inputs, x, name="feature_extractor")
+
+img1_in = Input(shape=IMG_SHAPE, name="Image_1")
+img2_in = Input(shape=IMG_SHAPE, name="Image_2")
+
+feat1 = feature_extractor(img1_in)
+feat2 = feature_extractor(img2_in)
+
+diff = Subtract()([feat1, feat2])
+
+x = Dense(64, activation='relu')(diff)
+output = Dense(1, activation='sigmoid', name="output")(x)
+
+model = Model(inputs=[img1_in, img2_in], outputs=output)
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001), 
+              loss='binary_crossentropy', 
+              metrics=['accuracy'])
+
+# ==========================================
+# สเตปที่ 4: เริ่ม Train !!
+# ==========================================
+print("\n")
+print("Training... \n")
+history = model.fit(train_gen, epochs=5) 
+
+# ==========================================
+# สเตปที่ 5: ทดสอบกับไฟล์ test.csv 
+# ==========================================
+print("Test with test.csv... \n")
+test_df = pd.read_csv(os.path.join(WORKSPACE_PATH, 'test.csv'))
+
+# เรียกใช้ Test Images โดยปิด is_training=False
+test_gen = SiameseDataGenerator(test_df, image_dir='Test Images', batch_size=BATCH_SIZE, img_shape=IMG_SHAPE, is_training=False)
+
+predictions = model.predict(test_gen)
+test_df['Winner'] = [1 if p < 0.5 else 2 for p in predictions]
+
+output_path = os.path.join(WORKSPACE_PATH, 'test_result_ready_to_submit.csv')
+test_df.to_csv(output_path, index=False)
+print(f"Predicted! \n Saved In: {output_path} \n")
+
+model_path = os.path.join(WORKSPACE_PATH, 'my_siamese_model.keras')
+model.save(model_path)
+print(f"Saved Model at: {model_path} \n")

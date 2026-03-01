@@ -1,0 +1,12 @@
+# ไม่เอาโฟลเดอร์รูปภาพขึ้น Git
+Questionaire Images/
+Instagram Photos/
+Test Images/
+
+# ไม่เอาไฟล์โมเดลขนาดใหญ่ขึ้น (ถ้าคุณอยากเก็บไว้แค่ในเครื่อง)
+*.keras
+*.h5
+
+# ไม่เอาโฟลเดอร์ขยะของ Python
+__pycache__/
+.ipynb_checkpoints/

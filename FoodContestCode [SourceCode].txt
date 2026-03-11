@@ -1,3 +1,7 @@
+#ต้องมีโฟลเดอร์ Intragram Photos ในนั้นจะมีโฟลเดอร์ย่อยที่แบ่งภาพออกเป็น 5 เมนู ได้แก่ Burger , Dessert , Pizza , Ramen และ Sushi
+#ต้องมีโฟลเดอร์ Questionaire Images ในนั้นจะมีโฟลเดอร์ย่อยที่แบ่งภาพออกเป็น 5 เมนู ได้แก่ Burger , Dessert , Pizza , Ramen และ Sushi
+#ต้องมีโฟลเดอร์ Test Images ในนั้นจะมีภาพเมนูอาหารเพื่อใช้ในการทำการแข่งขันหาอาหารน่ากิน
+
 import os
 import numpy as np
 import pandas as pd
@@ -10,7 +14,7 @@ from tensorflow.keras.applications import MobileNetV2
 print("\n")
 print("Starting TensorFlow version:", tf.__version__)
 
-# ล็อก Address ของ Workspace ตามที่คุณระบุ
+# ล็อก Address ของ Workspace
 WORKSPACE_PATH = r"C:\Users\USER\Desktop\FoodContestProject"
 
 # ==========================================
@@ -24,11 +28,11 @@ IMG_SHAPE = (224, 224, 3)
 BATCH_SIZE = 16
 
 # ==========================================
-# สเตปที่ 2: ปรับปรุง Data Generator ให้มุดเข้าโฟลเดอร์ย่อยได้
+# สเตปที่ 2: Data Generator เข้าโฟลเดอร์ย่อย
 # ==========================================
 class SiameseDataGenerator(tf.keras.utils.Sequence):
     def __init__(self, dataframe, image_dir, batch_size, img_shape, is_training=True):
-        super().__init__() # เพิ่มบรรทัดนี้เพื่อแก้ Warning สีเหลืองกวนใจ
+        super().__init__()
         self.dataframe = dataframe
         self.image_dir = image_dir
         self.batch_size = batch_size
@@ -45,10 +49,10 @@ class SiameseDataGenerator(tf.keras.utils.Sequence):
             np.random.shuffle(self.indexes)
             
     def load_and_preprocess(self, img_name, menu_folder=None):
-        # ถ้ามีระบุหมวดหมู่ (ตอน Train) ให้มุดเข้าโฟลเดอร์เมนูก่อน
+        # ถ้ามีระบุหมวดหมู่ (ตอน Train) ให้เข้าโฟลเดอร์เมนูก่อน
         if menu_folder:
             img_path = os.path.join(self.base_path, self.image_dir, menu_folder, img_name)
-        # ถ้าไม่มีหมวดหมู่ (ตอน Test) ให้ดึงรูปจากโฟลเดอร์หลักเลย
+        # ถ้าไม่มีระบุหมวดหมู่ (ตอน Test) ให้ดึงรูปจากโฟลเดอร์หลักเลย
         else:
             img_path = os.path.join(self.base_path, self.image_dir, img_name)
             
@@ -64,7 +68,7 @@ class SiameseDataGenerator(tf.keras.utils.Sequence):
         
         for _, row in batch_df.iterrows():
             if self.is_training:
-                # ให้ AI ไปอ่านคอลัมน์ 'Menu' (เช่น Sushi) เพื่อเข้าให้ถูกโฟลเดอร์
+                # ให้ AI อ่านคอลัมน์ 'Menu' (เช่น Sushi) เพื่อเข้าโฟลเดอร์ถูก
                 menu = row['Menu']
                 img1_batch.append(self.load_and_preprocess(row['Image 1'], menu))
                 img2_batch.append(self.load_and_preprocess(row['Image 2'], menu))
@@ -74,14 +78,14 @@ class SiameseDataGenerator(tf.keras.utils.Sequence):
                 img1_batch.append(self.load_and_preprocess(row['Image 1']))
                 img2_batch.append(self.load_and_preprocess(row['Image 2']))
                 
-        # 📌 [แก้จุดนี้!] บรรทัดที่ 71 และ 72: เปลี่ยนวงเล็บของ img1 และ img2 จาก [ ] เป็น ( ) 
+        # เปลี่ยนวงเล็บของ img1 และ img2 จาก [ ] เป็น ( ) 
         # เพื่อให้ Keras 3 มองว่าเป็น Tuple ไม่ใช่ List
         if self.is_training:
             return (np.array(img1_batch), np.array(img2_batch)), np.array(labels_batch)
         return ((np.array(img1_batch), np.array(img2_batch)), )
 
-# ***จุดสำคัญ: คุณเก็บโฟลเดอร์ 5 เมนูไว้ที่ไหน?***
-# ถ้าเก็บไว้ใน "Instagram Photos" ให้แก้คำว่า 'Questionaire Images' ในวงเล็บข้างล่างนี้ เป็น 'Instagram Photos' แทนนะครับ
+# ***จุดสำคัญ: โฟลเดอร์ 5 เมนูอยู่ไหน?***
+# ถ้าเก็บไว้ใน "Instagram Photos" ให้แก้คำว่า 'Questionaire Images' ในวงเล็บข้างล่างนี้ เป็น 'Instagram Photos' แทน
 train_gen = SiameseDataGenerator(train_df, image_dir='Questionaire Images', batch_size=BATCH_SIZE, img_shape=IMG_SHAPE)
 
 # ==========================================
@@ -113,7 +117,7 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
               metrics=['accuracy'])
 
 # ==========================================
-# สเตปที่ 4: เริ่ม Train !!
+# สเตปที่ 4: เริ่ม Train
 # ==========================================
 print("\n")
 print("Training... \n")
@@ -131,10 +135,12 @@ test_gen = SiameseDataGenerator(test_df, image_dir='Test Images', batch_size=BAT
 predictions = model.predict(test_gen)
 test_df['Winner'] = [1 if p < 0.5 else 2 for p in predictions]
 
+# Save ผลลัพธ์
 output_path = os.path.join(WORKSPACE_PATH, 'test_result_ready_to_submit.csv')
 test_df.to_csv(output_path, index=False)
 print(f"Predicted! \n Saved In: {output_path} \n")
 
+# Save Model
 model_path = os.path.join(WORKSPACE_PATH, 'my_siamese_model.keras')
 model.save(model_path)
 print(f"Saved Model at: {model_path} \n")

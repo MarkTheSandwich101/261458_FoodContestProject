@@ -2,6 +2,7 @@
 Questionaire Images/
 Instagram Photos/
 Test Images/
+Test Set 1/
 
 # ไม่เอาไฟล์โมเดลขนาดใหญ่ขึ้น (ถ้าคุณอยากเก็บไว้แค่ในเครื่อง)
 *.keras

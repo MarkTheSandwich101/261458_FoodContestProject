@@ -9,7 +9,8 @@ import pandas as pd # จัดการข้อมูลที่เป็น�
 import tensorflow as tf # ตัวสร้าง AI (Deep Learning)
 from tensorflow.keras.preprocessing.image import load_img, img_to_array # ตัวโหลด / แปลงรูปเป็นตัวเลข
 from tensorflow.keras.models import Model # ตัวสร้างโครงสร้างสมอง AI
-from tensorflow.keras.layers import Input, Dense, GlobalAveragePooling2D, Subtract # ชิ้นส่วนต่างๆ ของสมอง AI (เหมือนเลโก้)
+# นำเข้า Dropout เพิ่มเติม เพื่อใช้แก้ปัญหาการท่องจำ
+from tensorflow.keras.layers import Input, Dense, GlobalAveragePooling2D, Subtract, Dropout 
 from tensorflow.keras.applications import MobileNetV2 # โมเดล AI สำเร็จรูปที่เก่งเรื่องการดูรูป
 
 print("\n")
@@ -69,6 +70,13 @@ class SiameseDataGenerator(tf.keras.utils.Sequence):
         img = load_img(img_path, target_size=self.img_shape[:2])
         # แปลงรูปภาพให้เป็นชุดตัวเลข (Array)
         img_array = img_to_array(img)
+        
+        # Data Augmentation: สุ่มพลิกรูปภาพซ้าย-ขวา (เฉพาะตอน Train)
+        # ช่วยให้ AI เห็นรูปหลากหลายขึ้น ไม่ท่องจำ
+        if self.is_training:
+            if np.random.rand() > 0.5:
+                img_array = np.fliplr(img_array)
+                
         # ปรับสเกลสีของรูปภาพให้เข้ากับสิ่งที่โมเดล MobileNetV2 คุ้นเคย
         return tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
 
@@ -131,8 +139,13 @@ feat2 = feature_extractor(img2_in)
 # นำจุดเด่นของรูปทั้ง 2 มา 'ลบกัน' เพื่อหาว่ารูปไหนเด่นกว่ากัน
 diff = Subtract()([feat1, feat2])
 
+# เพิ่ม Dropout (สุ่มปิดการทำงานของโหนด 50%) ป้องกันไม่ให้ AI ท่องจำ
+x = Dropout(0.5)(diff)
 # สร้างส่วน 'สมองตัดสินใจ' หลังจากรู้ความแตกต่างแล้ว
-x = Dense(64, activation='relu')(diff)
+x = Dense(64, activation='relu')(x)
+# เพิ่ม Dropout อีกชั้นเพื่อความชัวร์ (สุ่มปิด 30%)
+x = Dropout(0.3)(x)
+
 # ตัดสินผลลัพธ์สุดท้าย: ค่าเข้าใกล้ 0 คือรูป 1 ชนะ, ค่าเข้าใกล้ 1 คือรูป 2 ชนะ
 output = Dense(1, activation='sigmoid', name="output")(x)
 
@@ -148,18 +161,18 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
 # ==========================================
 print("\n")
 print("Training... \n")
-# สั่งให้ AI เริ่มเรียนรู้จากข้อมูล 5 รอบ (Epochs)
-history = model.fit(train_gen, epochs=5) 
+# สั่งให้ AI เริ่มเรียนรู้จากข้อมูล 10 รอบ (Epochs) เพื่อให้เรียนรู้รูปที่ถูกพลิกแพลงได้ดีขึ้น
+history = model.fit(train_gen, epochs=10) 
 
 # ==========================================
-# สเตปที่ 5: ให้ AI ทำ test จริงด้วยไฟล์ test.csv 
+# STEP5: ให้ AI ทำ test จริงด้วยไฟล์ test.csv 
 # ==========================================
-print("Test with test.csv... \n")
-# โหลด test.csv มาเตรียมไว้
-test_df = pd.read_csv(os.path.join(WORKSPACE_PATH, 'test.csv'))
+print("Test with RealTest.csv... \n")
+# โหลด RealTest.csv มาเตรียมไว้
+test_df = pd.read_csv(os.path.join(WORKSPACE_PATH, 'RealTest.csv'))
 
 # เตรียมตัวป้อนรูปภาพสำหรับสอบ (ปิดโหมดเรียนรู้ is_training=False)
-test_gen = SiameseDataGenerator(test_df, image_dir='Test Images', batch_size=BATCH_SIZE, img_shape=IMG_SHAPE, is_training=False)
+test_gen = SiameseDataGenerator(test_df, image_dir='Test Set 1', batch_size=BATCH_SIZE, img_shape=IMG_SHAPE, is_training=False)
 
 # สั่งให้ AI ทำนายผลว่ารูปไหนชนะ
 predictions = model.predict(test_gen)
@@ -167,11 +180,11 @@ predictions = model.predict(test_gen)
 test_df['Winner'] = [1 if p < 0.5 else 2 for p in predictions]
 
 # บันทึกคำตอบลงในไฟล์ CSV ตัวใหม่
-output_path = os.path.join(WORKSPACE_PATH, 'test_result_ready_to_submit.csv')
+output_path = os.path.join(WORKSPACE_PATH, 'real_test_result_ready_to_submit.csv')
 test_df.to_csv(output_path, index=False)
 print(f"Predicted! \n Saved In: {output_path} \n")
 
 # บันทึกสมอง AI (โมเดล) ทั้งก้อนเอาไว้
-model_path = os.path.join(WORKSPACE_PATH, 'my_siamese_model.keras')
+model_path = os.path.join(WORKSPACE_PATH, 'my_siamese_model_in_testing_room.keras')
 model.save(model_path)
 print(f"Saved Model at: {model_path} \n")
